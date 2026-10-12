@@ -1,10 +1,9 @@
+import os
 import discord
 from discord.ext import commands
-import aiohttp
-import base64
 
-TOKEN = "PEGA_AQUI_TU_TOKEN"
-XAI_API_KEY = "PEGA_AQUI_TU_API_KEY"
+TOKEN = os.getenv("TOKEN")
+XAI_API_KEY = os.getenv("XAI_API_KEY")
 
 intents = discord.Intents.default()
 intents.members = True
