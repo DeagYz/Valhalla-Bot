@@ -1,3 +1,5 @@
+import aiohttp
+import base64
 import os
 import discord
 from discord.ext import commands
