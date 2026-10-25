@@ -61,11 +61,14 @@ MIGRACION_CANALES_TEXTO = {
 }
 MIGRACION_CANALES_VOZ = {
     "VALHALLA ELITE": "MICTLÁN ELITE",
+    "MICTLAN ELITE": "MICTLÁN ELITE",
 }
 MIGRACION_ROLES = {
     "👑 Valhalla Elite": ROL_ELITE,
     "Valhalla Elite": ROL_ELITE,
     "Mictlán Elite": ROL_ELITE,
+    "👑 Mictlan Elite": ROL_ELITE,
+    "Mictlan Elite": ROL_ELITE,
     "👑 Líder": ROL_LIDER,
     "Lidel": ROL_LIDER,
     "🔱 Co-Líderes": ROL_COLIDER,
