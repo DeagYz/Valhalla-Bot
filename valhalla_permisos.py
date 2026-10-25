@@ -19,14 +19,28 @@ TRIAL = ["Trial", "⚔️ Trial"]
 CONTENT = ["Creador de Contenido", "🎥 Creador de Contenido"]
 
 EQUIPOS = {
-    "valhalla-elite": "👑 Valhalla Elite",
-    "valhalla-v1": "⚔️ V.I",
-    "valhalla-v2": "🛡️ V.II",
+    "mictlan-elite": "👑 Mictlán Elite",
+    "mictlan-v1": "⚔️ V.I",
+    "mictlan-v2": "🛡️ V.II",
     "cantera": "🌱 Cantera",
 }
 
-VOCES_EQUIPO = ["VALHALLA ELITE", "V.I", "V.II", "Cantera"]
+VOCES_EQUIPO = ["MICTLÁN ELITE", "V.I", "V.II", "Cantera"]
 VOCES_SCRIMS = ["Equipo V.1", "Equipo V2"]
+
+# Migración del rebranding Valhalla -> Mictlán: nombre viejo -> nombre nuevo
+MIGRACION_CANALES_TEXTO = {
+    "valhalla-elite": "mictlan-elite",
+    "valhalla-v1": "mictlan-v1",
+    "valhalla-v2": "mictlan-v2",
+}
+MIGRACION_CANALES_VOZ = {
+    "VALHALLA ELITE": "MICTLÁN ELITE",
+}
+MIGRACION_ROLES = {
+    "👑 Valhalla Elite": "👑 Mictlán Elite",
+    "Valhalla Elite": "Mictlán Elite",
+}
 
 SOLO_LECTURA = ["reglamento", "requisitos", "ranking-interno", "anuncios-oficiales", "roles-y-estructura", "bienvenida"]
 ABIERTOS = [
@@ -44,6 +58,26 @@ async def limpiar_y_poner_permisos(canal, target, **permisos):
     except:
         pass
     await canal.set_permissions(target, **permisos)
+
+async def migrar_nombres(guild):
+    """Renombra canales y roles con nombres viejos (Valhalla) a los nuevos (Mictlán)."""
+    for viejo, nuevo in MIGRACION_ROLES.items():
+        rol = discord.utils.get(guild.roles, name=viejo)
+        if rol and not discord.utils.get(guild.roles, name=nuevo):
+            try:
+                await rol.edit(name=nuevo, reason="Rebranding a Mictlán")
+                print(f"OK: Rol migrado {viejo} -> {nuevo}")
+            except Exception as e:
+                print(f"AVISO: No se pudo migrar el rol {viejo}: {e}")
+    for coleccion, mapa in ((guild.text_channels, MIGRACION_CANALES_TEXTO), (guild.voice_channels, MIGRACION_CANALES_VOZ)):
+        for viejo, nuevo in mapa.items():
+            canal = discord.utils.get(coleccion, name=viejo)
+            if canal and not discord.utils.get(coleccion, name=nuevo):
+                try:
+                    await canal.edit(name=nuevo, reason="Rebranding a Mictlán")
+                    print(f"OK: Canal migrado {viejo} -> {nuevo}")
+                except Exception as e:
+                    print(f"AVISO: No se pudo migrar el canal {viejo}: {e}")
 
 async def analizar_captura(image_url):
     async with aiohttp.ClientSession() as session:
@@ -93,6 +127,10 @@ async def on_ready():
                 print(f"OK: Apodo cambiado a Mictlán en {g.name}")
         except Exception as e:
             print(f"AVISO: No se pudo cambiar el apodo en {g.name}: {e}")
+        try:
+            await migrar_nombres(g)
+        except Exception as e:
+            print(f"AVISO: Error en la migración de nombres en {g.name}: {e}")
     guild = bot.guilds[0]
     roles = {r.name: r for r in guild.roles}
     everyone = guild.default_role
@@ -102,7 +140,7 @@ async def on_ready():
         "Cantera": "🌱 Cantera",
         "V.II": "🛡️ V.II",
         "V.I": "⚔️ V.I",
-        "Valhalla Elite": "👑 Valhalla Elite",
+        "Mictlán Elite": "👑 Mictlán Elite",
         "Creador de Contenido": "🎥 Creador de Contenido",
         "Co-Lideres": "🔱 Co-Líderes",
         "Lidel": "👑 Líder",
@@ -161,7 +199,7 @@ async def on_ready():
     for voz_nombre in VOCES_EQUIPO:
         voz = discord.utils.get(guild.voice_channels, name=voz_nombre)
         if voz:
-            rol_voz = {"VALHALLA ELITE": "👑 Valhalla Elite", "V.I": "⚔️ V.I", "V.II": "🛡️ V.II", "Cantera": "🌱 Cantera"}.get(voz_nombre)
+            rol_voz = {"MICTLÁN ELITE": "👑 Mictlán Elite", "V.I": "⚔️ V.I", "V.II": "🛡️ V.II", "Cantera": "🌱 Cantera"}.get(voz_nombre)
             await limpiar_y_poner_permisos(voz, everyone, connect=False, speak=False, use_voice_activation=False)
             if rol_voz and rol_voz in roles:
                 await limpiar_y_poner_permisos(voz, roles[rol_voz], connect=True, speak=True, use_voice_activation=True, stream=True)
@@ -255,7 +293,7 @@ async def on_raw_reaction_add(payload):
 
 @bot.event
 async def on_message(message):
-    if message.author.bot:
+    if message.author.bot or message.guild is None:
         return
 
     if message.channel.name == "analisis-y-feedback" and message.attachments:
@@ -348,7 +386,7 @@ async def permisos(ctx):
         await ctx.send("Solo staff.", delete_after=5)
         return
     await ctx.send("Re-aplicando permisos...")
-    await bot.dispatch("ready")
+    bot.dispatch("ready")
     await ctx.send("✅ Permisos re-aplicados.", delete_after=5)
 
 bot.run(TOKEN)
