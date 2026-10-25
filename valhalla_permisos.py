@@ -93,6 +93,7 @@ ABIERTOS = [
 ]
 
 CANAL_AVISO = "admins-gods"
+CANAL_QUEJAS = "quejas-y-sugerencias"
 CANAL_SOLICITUDES = "solicitudes"
 PALABRAS_SOLICITUD = ["unirme", "unirse", "entrar", "solicitud", "reclutamiento", "tryout", "aplicar"]
 
@@ -319,7 +320,7 @@ async def configurar_servidor(guild):
         voz = discord.utils.get(guild.voice_channels, name=voz_nombre)
         if voz:
             try:
-                await limpiar_y_poner_permisos(voz, everyone, connect=False, speak=False, use_voice_activation=False)
+                await limpiar_y_poner_permisos(voz, everyone, connect=False, speak=False, use_voice_activation=True)
                 if rol_voz in roles:
                     await limpiar_y_poner_permisos(voz, roles[rol_voz], connect=True, speak=True, use_voice_activation=True, stream=True)
                 for r in staff_roles:
@@ -332,10 +333,13 @@ async def configurar_servidor(guild):
         voz = discord.utils.get(guild.voice_channels, name=voz_nombre)
         if voz:
             try:
-                await limpiar_y_poner_permisos(voz, everyone, connect=True, speak=True, use_voice_activation=True, stream=True)
+                # Scrims abiertos para todos, incluidos los Xoloitzcuintle
+                abierto = dict(view_channel=True, connect=True, speak=True, use_voice_activation=True,
+                               stream=True, send_messages=True, read_message_history=True)
+                await limpiar_y_poner_permisos(voz, everyone, **abierto)
                 for t in TRIAL:
                     if t in roles:
-                        await limpiar_y_poner_permisos(voz, roles[t], connect=False, speak=False, use_voice_activation=False)
+                        await limpiar_y_poner_permisos(voz, roles[t], **abierto)
                 print(f"OK: Scrims {voz_nombre}")
             except Exception as e:
                 print(f"AVISO: Error en scrims {voz_nombre}: {e}")
@@ -360,6 +364,22 @@ async def configurar_servidor(guild):
             except Exception as e:
                 print(f"AVISO: Error en #{nombre}: {e}")
 
+    # Sin push-to-talk: ningún permiso de canal de voz niega la activación por voz
+    for voz in guild.voice_channels:
+        for target, ow in list(voz.overwrites.items()):
+            if ow.use_voice_activation is False:
+                try:
+                    ow.use_voice_activation = True
+                    await voz.set_permissions(target, overwrite=ow)
+                    print(f"OK: Activación por voz en {voz.name} para {target}")
+                except Exception as e:
+                    print(f"AVISO: No se pudo quitar push-to-talk en {voz.name}: {e}")
+
+    try:
+        await preparar_quejas(guild)
+    except Exception as e:
+        print(f"AVISO: Error preparando #{CANAL_QUEJAS}: {e}")
+
     try:
         await actualizar_mensajes_viejos(guild)
     except Exception as e:
@@ -380,6 +400,62 @@ async def configurar_servidor(guild):
             print(f"AVISO: Error con #reglamento: {e}")
 
     print(f"CONFIGURACION COMPLETA: {guild.name}")
+
+
+def embed_quejas_intro():
+    embed = discord.Embed(
+        title="📨 QUEJAS Y SUGERENCIAS",
+        description=(
+            "Las almas del Mictlán también tienen voz.\n\n"
+            "Escribe aquí tu queja o sugerencia en un solo mensaje, con respeto y lo más claro posible.\n"
+            "El bot reaccionará con 📨 y la enviará al staff, que la revisará.\n\n"
+            "El bot no hace cambios automáticos: cada caso lo decide el staff."
+        ),
+        color=discord.Color.dark_purple()
+    )
+    return aplicar_marca(embed)
+
+
+async def preparar_quejas(guild):
+    """Crea #quejas-y-sugerencias si falta, la deja abierta y fija la intro una sola vez."""
+    canal = discord.utils.get(guild.text_channels, name=CANAL_QUEJAS)
+    if canal is None:
+        categoria = next((c for c in guild.categories if "INFORMACI" in c.name.upper()), None)
+        canal = await guild.create_text_channel(CANAL_QUEJAS, category=categoria,
+                                                topic="Quejas y sugerencias para el staff de " + NOMBRE)
+        print(f"OK: Creado #{CANAL_QUEJAS}")
+    await canal.set_permissions(guild.default_role, view_channel=True, read_message_history=True,
+                                send_messages=True, add_reactions=True, attach_files=True, embed_links=True)
+    for msg in await canal.pins():
+        if msg.author.id == bot.user.id and msg.embeds and "QUEJAS" in str(msg.embeds[0].title).upper():
+            return
+    intro = await canal.send(embed=embed_quejas_intro())
+    await intro.pin()
+
+
+async def registrar_queja(message):
+    """Acusa recibo y copia la queja a #admins-gods. No toma ninguna acción automática en el servidor."""
+    try:
+        await message.add_reaction("📨")
+    except Exception as e:
+        print(f"AVISO: No se pudo reaccionar en #{CANAL_QUEJAS}: {e}")
+    try:
+        await message.reply("¡Gracias por tu mensaje! El staff lo revisará pronto. 📨", mention_author=False)
+    except Exception as e:
+        print(f"AVISO: No se pudo responder en #{CANAL_QUEJAS}: {e}")
+    aviso = discord.utils.get(message.guild.text_channels, name=CANAL_AVISO)
+    if aviso:
+        embed = discord.Embed(
+            title="📨 Nueva queja / sugerencia",
+            description=(message.content or "(sin texto)")[:4000],
+            color=discord.Color.dark_purple(),
+            timestamp=message.created_at
+        )
+        embed.add_field(name="Autor", value=f"{message.author} (`{message.author.id}`)", inline=False)
+        embed.add_field(name="Mensaje", value=message.jump_url, inline=False)
+        if message.attachments:
+            embed.add_field(name="Adjuntos", value="\n".join(a.url for a in message.attachments)[:1000], inline=False)
+        await aviso.send(embed=aplicar_marca(embed))
 
 
 async def configurar_todo():
@@ -550,6 +626,10 @@ async def on_message(message):
         return
 
     contenido = message.content.lower().strip()
+
+    if message.channel.name == CANAL_QUEJAS and not contenido.startswith(bot.command_prefix):
+        await registrar_queja(message)
+        return
 
     if message.channel.name == "analisis-y-feedback" and message.attachments:
         for attachment in message.attachments:
