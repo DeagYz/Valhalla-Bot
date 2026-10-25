@@ -195,11 +195,11 @@ async def on_ready():
                 break
         if not ya_existe:
             embed = discord.Embed(
-                title="📜 REGLAMENTO DE VALHALLA SPORTS MX",
+                title="📜 REGLAMENTO DE ⚔️ Mictlán SsG Sports🗡️",
                 description="Lee las reglas con atención.\n\n✅ **Reacciona con ✅ para aceptar el reglamento.**",
                 color=discord.Color.gold()
             )
-            embed.set_footer(text="Valhalla Sports MX")
+            embed.set_footer(text="⚔️ Mictlán SsG Sports🗡️")
             msg = await reglamento.send(embed=embed)
             await msg.add_reaction("✅")
 
@@ -210,8 +210,8 @@ async def on_member_join(member):
     canal = discord.utils.get(member.guild.text_channels, name="bienvenida")
     if canal:
         embed = discord.Embed(
-            title="⚔️ BIENVENIDO A VALHALLA SPORTS MX ⚔️",
-            description=f"{member.mention}\n\nFrom the halls of Valhalla to the Land of Glory.\n\n"
+            title="BIENVENIDO A ⚔️ Mictlán SsG Sports🗡️",
+            description=f"{member.mention}\n\nDesde las profundidades del Mictlán hasta la tierra de la gloria.\n\n"
                         "📌 **Antes de nada:**\n"
                         "1. Lee el canal #reglamento\n"
                         "2. Lee #roles-y-estructura\n"
@@ -221,7 +221,7 @@ async def on_member_join(member):
             color=discord.Color.gold()
         )
         embed.set_thumbnail(url=member.display_avatar.url)
-        embed.set_footer(text="Valhalla Sports MX")
+        embed.set_footer(text="⚔️ Mictlán SsG Sports🗡️")
         await canal.send(embed=embed)
     aviso = discord.utils.get(member.guild.text_channels, name=CANAL_AVISO)
     if aviso:
@@ -281,17 +281,17 @@ async def on_message(message):
         tickets_abiertos.add(message.author.id)
         embed = discord.Embed(
             title="⚔️ Ticket de Solicitud ⚔️",
-            description=f"Bienvenido {message.author.mention} a **Valhalla Sports MX**.\n\n"
+            description=f"Bienvenido {message.author.mention} a **Mictlán SsG Sports**.\n\n"
                         "Responde estas preguntas para unirte como Trial:\n\n"
                         "1️⃣ Usuario de MLBB (con ID)\n"
                         "2️⃣ Rango actual y servidor\n"
                         "3️⃣ Rol principal\n"
                         "4️⃣ ¿Cuántas horas juegas a la semana?\n"
-                        "5️⃣ ¿Por qué quieres unirte a Valhalla?\n\n"
+                        "5️⃣ ¿Por qué quieres unirte a Mictlán SsG Sports?\n\n"
                         "Cuando termines, escribe **listo** y recibirás el rol Trial automáticamente.",
             color=discord.Color.gold()
         )
-        embed.set_footer(text="Valhalla Sports MX")
+        embed.set_footer(text="⚔️ Mictlán SsG Sports🗡️")
         await ticket_channel.send(embed=embed)
         await message.channel.send(f"{message.author.mention} tu ticket se creó en {ticket_channel.mention}")
 
@@ -299,7 +299,7 @@ async def on_message(message):
         trial_role = discord.utils.get(message.guild.roles, name="⚔️ Trial")
         if trial_role and trial_role not in message.author.roles:
             await message.author.add_roles(trial_role)
-            embed = discord.Embed(title="🎉 ¡Bienvenido a Valhalla!", description=f"{message.author.mention} ahora tienes el rol **⚔️ Trial**.", color=discord.Color.green())
+            embed = discord.Embed(title="🎉 ¡Bienvenido al Mictlán!", description=f"{message.author.mention} ahora tienes el rol **⚔️ Trial**.", color=discord.Color.green())
             await message.channel.send(embed=embed)
             aviso = discord.utils.get(message.guild.text_channels, name=CANAL_AVISO)
             if aviso:
@@ -318,7 +318,7 @@ async def anuncio(ctx, *, mensaje: str):
         await ctx.send("No encontré #anuncios-oficiales.")
         return
     embed = discord.Embed(title="⚔️ ANUNCIO OFICIAL ⚔️", description=mensaje, color=discord.Color.gold())
-    embed.set_footer(text="From the halls of Valhalla to the Land of Glory")
+    embed.set_footer(text="⚔️ Mictlán SsG Sports🗡️ • Desde las profundidades del Mictlán hasta la tierra de la gloria")
     embed.timestamp = discord.utils.utcnow()
     await canal.send(embed=embed)
     await ctx.message.delete()
