@@ -404,12 +404,13 @@ async def configurar_servidor(guild):
 
 def embed_quejas_intro():
     embed = discord.Embed(
-        title="📨 QUEJAS Y SUGERENCIAS",
+        title="📨 ¡Bienvenido a Quejas y Sugerencias!",
         description=(
-            "Las almas del Mictlán también tienen voz.\n\n"
-            "Escribe aquí tu queja o sugerencia en un solo mensaje, con respeto y lo más claro posible.\n"
-            "El bot reaccionará con 📨 y la enviará al staff, que la revisará.\n\n"
-            "El bot no hace cambios automáticos: cada caso lo decide el staff."
+            "Este es tu espacio para que el Mictlán sea cada vez mejor.\n\n"
+            "💡 ¿Tienes una idea para el server, los scrims o el bot? Escríbela aquí.\n"
+            "⚠️ ¿Algo no funciona o tuviste un problema con alguien? Cuéntanos con respeto.\n\n"
+            "Cada mensaje le llega al staff y lo revisamos. Te respondemos lo antes posible.\n\n"
+            "🙏 Sé claro y respetuoso; las quejas sin respeto se eliminan."
         ),
         color=discord.Color.dark_purple()
     )
