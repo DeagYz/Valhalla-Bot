@@ -86,6 +86,13 @@ async def analizar_captura(image_url):
 @bot.event
 async def on_ready():
     print(f"Conectado como {bot.user}")
+    for g in bot.guilds:
+        try:
+            if g.me.nick != "Mictlán":
+                await g.me.edit(nick="Mictlán")
+                print(f"OK: Apodo cambiado a Mictlán en {g.name}")
+        except Exception as e:
+            print(f"AVISO: No se pudo cambiar el apodo en {g.name}: {e}")
     guild = bot.guilds[0]
     roles = {r.name: r for r in guild.roles}
     everyone = guild.default_role
