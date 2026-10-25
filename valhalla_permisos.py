@@ -118,6 +118,72 @@ def aplicar_marca(embed):
     return embed
 
 
+def embed_reglamento():
+    embed = discord.Embed(
+        title=f"📜 REGLAMENTO DE {NOMBRE}",
+        description="Lee las reglas con atención.\n\n✅ **Reacciona con ✅ para aceptar el reglamento.**",
+        color=discord.Color.gold()
+    )
+    return aplicar_marca(embed)
+
+
+# Reemplazos de textos viejos (de más específico a más general)
+REEMPLAZOS_MARCA = [
+    ("From the halls of Valhalla to the Land of Glory", ESLOGAN),
+    ("VALHALLA SPORTS MX", "MICTLÁN SSG SPORTS"),
+    ("Valhalla Sports MX", "Mictlán SsG Sports"),
+    ("VALHALLA", "MICTLÁN"),
+    ("Valhalla", "Mictlán"),
+    ("valhalla", "mictlán"),
+]
+
+
+def reemplazar_marca(valor):
+    if isinstance(valor, str):
+        for viejo, nuevo in REEMPLAZOS_MARCA:
+            valor = valor.replace(viejo, nuevo)
+        return valor
+    if isinstance(valor, dict):
+        return {k: reemplazar_marca(v) for k, v in valor.items()}
+    if isinstance(valor, list):
+        return [reemplazar_marca(v) for v in valor]
+    return valor
+
+
+def menciona_valhalla(msg):
+    texto = (msg.content or "") + " ".join(str(e.to_dict()) for e in msg.embeds)
+    return "valhalla" in texto.lower()
+
+
+async def actualizar_mensajes_viejos(guild):
+    """Edita (sin borrar ni quitar reacciones) los mensajes del propio bot que aún dicen Valhalla."""
+    for nombre in SOLO_LECTURA:
+        canal = discord.utils.get(guild.text_channels, name=nombre)
+        if not canal:
+            continue
+        editados = 0
+        try:
+            async for msg in canal.history(limit=100):
+                if msg.author.id != bot.user.id or not menciona_valhalla(msg):
+                    continue
+                try:
+                    if nombre == "reglamento":
+                        await msg.edit(content=None, embed=embed_reglamento())
+                    else:
+                        embeds = [discord.Embed.from_dict(reemplazar_marca(e.to_dict())) for e in msg.embeds]
+                        for e in embeds:
+                            if e.footer and e.footer.text:
+                                e.set_footer(text=PIE, icon_url=LOGO_URL)
+                        await msg.edit(content=reemplazar_marca(msg.content) or None, embeds=embeds)
+                    editados += 1
+                except Exception as e:
+                    print(f"AVISO: No se pudo editar un mensaje en #{nombre}: {e}")
+        except Exception as e:
+            print(f"AVISO: No se pudo leer el historial de #{nombre}: {e}")
+        if editados:
+            print(f"OK: {editados} mensajes viejos actualizados en #{nombre}")
+
+
 def dueno_ticket(canal):
     """Devuelve el user_id dueño de un canal de ticket (guardado en el topic), o None."""
     topic = getattr(canal, "topic", None) or ""
@@ -291,22 +357,21 @@ async def configurar_servidor(guild):
             except Exception as e:
                 print(f"AVISO: Error en #{nombre}: {e}")
 
+    try:
+        await actualizar_mensajes_viejos(guild)
+    except Exception as e:
+        print(f"AVISO: Error actualizando mensajes viejos en {guild.name}: {e}")
+
     reglamento = discord.utils.get(guild.text_channels, name="reglamento")
     if reglamento:
         try:
             ya_existe = False
-            async for msg in reglamento.history(limit=5):
-                if msg.embeds and "REGLAMENTO" in str(msg.embeds[0].title):
+            async for msg in reglamento.history(limit=100):
+                if msg.author.id == bot.user.id and msg.embeds and "REGLAMENTO" in str(msg.embeds[0].title).upper():
                     ya_existe = True
                     break
             if not ya_existe:
-                embed = discord.Embed(
-                    title=f"📜 REGLAMENTO DE {NOMBRE}",
-                    description="Lee las reglas con atención.\n\n✅ **Reacciona con ✅ para aceptar el reglamento.**",
-                    color=discord.Color.gold()
-                )
-                aplicar_marca(embed)
-                msg = await reglamento.send(embed=embed)
+                msg = await reglamento.send(embed=embed_reglamento())
                 await msg.add_reaction("✅")
         except Exception as e:
             print(f"AVISO: Error con #reglamento: {e}")
