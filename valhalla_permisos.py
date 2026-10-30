@@ -2,8 +2,9 @@ import asyncio
 import aiohttp
 import base64
 import os
+import datetime
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 TOKEN = os.getenv("TOKEN")
 XAI_API_KEY = os.getenv("XAI_API_KEY")
@@ -13,12 +14,17 @@ intents.members = True
 intents.guilds = True
 intents.message_content = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
 # Branding
 NOMBRE = "⚔️ Mictlán SsG Sports🗡️"
 ESLOGAN = "Del inframundo a la gloria"
 PIE = f"{NOMBRE} • {ESLOGAN}"
+LOGO_TEXTO = "Sangre · Sudor · Gloria"
+HORARIO_EQUIPO = "Lunes a viernes, alrededor de las 7:00 pm (hora de Ciudad de México)"
+ZONA_MX = datetime.timezone(datetime.timedelta(hours=-6), "CDMX")  # México ya no usa horario de verano
+# Recordatorio de scrim: apagado por defecto. Se activa con la variable de entorno SCRIM_RECORDATORIO=1
+RECORDATORIO_ACTIVO = os.getenv("SCRIM_RECORDATORIO", "0") == "1"
 LOGO_URL = "https://raw.githubusercontent.com/DeagYz/Valhalla-Bot/main/assets/mictlan_logo.jpg"
 
 # Rangos (nombres nuevos)
@@ -85,7 +91,7 @@ MIGRACION_ROLES = {
     "V.II": ROL_V2,
 }
 
-SOLO_LECTURA = ["reglamento", "requisitos", "ranking-interno", "anuncios-oficiales", "roles-y-estructura", "bienvenida"]
+SOLO_LECTURA = ["reglamento", "horarios-y-torneos", "requisitos", "ranking-interno", "anuncios-oficiales", "roles-y-estructura", "bienvenida"]
 ABIERTOS = [
     "looking-for-5q", "analisis-y-feedback", "off-topic", "memes",
     "solicitudes", "clips-oficiales",
@@ -99,6 +105,7 @@ PALABRAS_SOLICITUD = ["unirme", "unirse", "entrar", "solicitud", "reclutamiento"
 
 # user_id -> channel_id del ticket abierto
 tickets_abiertos = {}
+reglamento_aceptado = set()  # evita avisos repetidos en #admins-gods
 setup_hecho = False
 
 
@@ -475,10 +482,24 @@ async def on_ready():
     if setup_hecho:
         return
     setup_hecho = True
+    if RECORDATORIO_ACTIVO and not recordatorio_scrim.is_running():
+        recordatorio_scrim.start()
+        print("OK: Recordatorio de scrim activado")
     await configurar_todo()
 
 
-async def analizar_captura(image_url):
+PROMPT_SISTEMA = (
+    "Eres el analista de Mobile Legends: Bang Bang del equipo Mictlán SsG Sports. Respondes en español, "
+    "claro y breve (máximo ~250 palabras). Reglas estrictas: "
+    "1) Solo afirma lo que se ve en la captura. Si no estás seguro de un héroe, di 'no estoy seguro' en lugar de adivinar. "
+    "2) Si el jugador indica su héroe o rol en el mensaje, analiza ESE héroe/jugador. "
+    "3) No inventes cifras: si un dato (KDA, oro, daño, MVP) no se ve, escribe 'no visible'. "
+    "4) Estructura: Resumen (1 línea) · Datos visibles · 3 consejos concretos · Qué hizo bien. "
+    "5) No cites versiones o parches concretos del meta si no estás seguro."
+)
+
+
+async def analizar_captura(image_url, contexto=""):
     if not XAI_API_KEY:
         return "El análisis de capturas no está disponible en este momento."
     try:
@@ -487,28 +508,28 @@ async def analizar_captura(image_url):
             async with session.get(image_url) as resp:
                 resp.raise_for_status()
                 image_data = await resp.read()
+                mime = resp.content_type if (resp.content_type or "").startswith("image/") else "image/jpeg"
             image_b64 = base64.b64encode(image_data).decode()
             headers = {
                 "Authorization": f"Bearer {XAI_API_KEY}",
                 "Content-Type": "application/json"
             }
+            texto_usuario = "Analiza esta captura de Mobile Legends: Bang Bang."
+            if contexto:
+                texto_usuario += f"\nContexto que escribió el jugador (tómalo en cuenta): {contexto[:500]}"
             payload = {
                 "model": "grok-4",
+                "temperature": 0.2,
+                "max_tokens": 900,
                 "messages": [
+                    {"role": "system", "content": PROMPT_SISTEMA},
                     {
                         "role": "user",
                         "content": [
-                            {
-                                "type": "text",
-                                "text": "Analiza esta captura de Mobile Legends: Bang Bang con precisión. "
-                                        "Identifica correctamente cada héroe por su apariencia e ícono (no te equivoques de héroe). "
-                                        "Si el usuario menciona un héroe específico (como Alaiza, Ling, etc.), enfócate en ese. "
-                                        "Da el KDA, oro, daño, MVP y un feedback claro y útil basado en el meta actual. "
-                                        "Sé preciso con los nombres de los héroes y no repitas el mismo héroe si no aparece dos veces."
-                            },
+                            {"type": "text", "text": texto_usuario},
                             {
                                 "type": "image_url",
-                                "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}
+                                "image_url": {"url": f"data:{mime};base64,{image_b64}", "detail": "high"}
                             }
                         ]
                     }
@@ -537,9 +558,11 @@ async def on_member_join(member):
                         "📌 **Antes de nada:**\n"
                         "1. Lee el canal #reglamento\n"
                         "2. Lee #roles-y-estructura\n"
-                        "3. Si quieres unirte, ve a #requisitos y #solicitudes\n\n"
+                        "3. Si quieres unirte, ve a #requisitos y #solicitudes\n"
+                        "4. Horarios y torneos en #horarios-y-torneos\n\n"
                         "Respeto, disciplina y ganas de mejorar.\n\n"
-                        "💬 Habla en #casual-community",
+                        "💬 Habla en #casual-community\n"
+                        "🤖 Escribe **!ayuda** para ver lo que puedo hacer",
             color=discord.Color.gold()
         )
         aplicar_marca(embed)
@@ -574,7 +597,8 @@ async def on_raw_reaction_add(payload):
     channel = guild.get_channel(payload.channel_id)
     if channel and channel.name == "reglamento":
         member = guild.get_member(payload.user_id)
-        if member and not member.bot:
+        if member and not member.bot and member.id not in reglamento_aceptado:
+            reglamento_aceptado.add(member.id)
             aviso = discord.utils.get(guild.text_channels, name=CANAL_AVISO)
             if aviso:
                 await aviso.send(f"✅ {member.mention} aceptó el reglamento.")
@@ -599,8 +623,9 @@ async def abrir_ticket(message):
         rol = discord.utils.get(guild.roles, name=nombre)
         if rol:
             overwrites[rol] = discord.PermissionOverwrite(view_channel=True, read_message_history=True, send_messages=True)
+    categoria = next((c for c in guild.categories if "RECLUTAMIENTO" in c.name.upper()), None)
     ticket_channel = await guild.create_text_channel(
-        name=f"ticket-{autor.name}", overwrites=overwrites,
+        name=f"ticket-{autor.name}", overwrites=overwrites, category=categoria,
         topic=f"ticket:{autor.id}", reason="Ticket de solicitud"
     )
     tickets_abiertos[autor.id] = ticket_channel.id
@@ -632,15 +657,22 @@ async def on_message(message):
         await registrar_queja(message)
         return
 
-    if message.channel.name == "analisis-y-feedback" and message.attachments:
-        for attachment in message.attachments:
-            if attachment.content_type and attachment.content_type.startswith("image"):
-                await message.channel.send("Analizando captura...")
-                analisis = await analizar_captura(attachment.url)
-                partes = [analisis[i:i+1900] for i in range(0, len(analisis), 1900)] or ["No pude analizar la captura en este momento."]
-                await message.reply(partes[0])
-                for parte in partes[1:]:
-                    await message.channel.send(parte)
+    if message.channel.name == "analisis-y-feedback" and message.attachments and not contenido.startswith(bot.command_prefix):
+        imagenes = [a for a in message.attachments if a.content_type and a.content_type.startswith("image")][:3]
+        for attachment in imagenes:
+            estado = await message.channel.send("🔍 Analizando tu captura (puede tardar unos segundos)...")
+            async with message.channel.typing():
+                analisis = await analizar_captura(attachment.url, message.content)
+            partes = [analisis[i:i+1900] for i in range(0, len(analisis), 1900)] or ["No pude analizar la captura en este momento."]
+            try:
+                await estado.delete()
+            except Exception:
+                pass
+            await message.reply(partes[0])
+            for parte in partes[1:]:
+                await message.channel.send(parte)
+        if len([a for a in message.attachments if a.content_type and a.content_type.startswith("image")]) > 3:
+            await message.channel.send("Solo analizo las primeras 3 imágenes por mensaje.", delete_after=10)
 
     if message.channel.name == CANAL_SOLICITUDES and not contenido.startswith(bot.command_prefix) and not es_staff(message.author):
         if any(p in contenido for p in PALABRAS_SOLICITUD):
@@ -720,6 +752,72 @@ async def permisos(ctx):
     await ctx.send("Re-aplicando permisos...")
     await configurar_servidor(ctx.guild)
     await ctx.send("✅ Permisos re-aplicados.", delete_after=5)
+
+
+def embed_ayuda(es_admin):
+    embed = discord.Embed(
+        title=f"🤖 Ayuda de {NOMBRE}",
+        description="Esto es lo que puedo hacer por ti:",
+        color=discord.Color.gold()
+    )
+    embed.add_field(name="!ayuda / !help", value="Muestra este mensaje.", inline=False)
+    embed.add_field(name="!info", value="Información del equipo y del servidor.", inline=False)
+    embed.add_field(name="!horarios", value="Cuándo juega el equipo y dónde ver torneos.", inline=False)
+    embed.add_field(name="!solicitud", value="En #solicitudes: abre tu ticket privado para unirte.", inline=False)
+    embed.add_field(name="📊 Análisis de partidas", value="Sube una captura en #analisis-y-feedback y escribe tu héroe/rol en el mensaje.", inline=False)
+    embed.add_field(name="📨 Quejas y sugerencias", value="Escríbelas en #quejas-y-sugerencias; le llegan al staff.", inline=False)
+    if es_admin:
+        embed.add_field(name="Staff", value="!anuncio <texto> · !cerrar (dentro de un ticket) · !permisos", inline=False)
+    return aplicar_marca(embed)
+
+
+@bot.command(name="ayuda", aliases=["help", "comandos"])
+async def ayuda(ctx):
+    await ctx.send(embed=embed_ayuda(es_staff(ctx.author)))
+
+
+@bot.command(name="info")
+async def info(ctx):
+    embed = discord.Embed(
+        title=NOMBRE,
+        description=f"**{ESLOGAN}**\n*{LOGO_TEXTO}*\n\nEscuadra competitiva de Mobile Legends: Bang Bang.\n"
+                    "Rangos: 💀 Mictlantecuhtli · 🦉 Señores del Mictlán · 👑 Mictlán Elite · 🐆 Guerreros Jaguar · "
+                    "🦅 Guerreros Águila · 🌱 Almas Nuevas · 🐕 Xoloitzcuintle.\n\n"
+                    "¿Quieres unirte? Lee #requisitos y escribe en #solicitudes.",
+        color=discord.Color.gold()
+    )
+    await ctx.send(embed=aplicar_marca(embed))
+
+
+@bot.command(name="horarios", aliases=["horario"])
+async def horarios(ctx):
+    canal = discord.utils.get(ctx.guild.text_channels, name="horarios-y-torneos") if ctx.guild else None
+    destino = canal.mention if canal else "#horarios-y-torneos"
+    embed = discord.Embed(
+        title="🕖 Horarios del equipo",
+        description=f"**{HORARIO_EQUIPO}**.\n\nScrims y entrenamientos: #scrims-y-entrenamientos.\n"
+                    f"Calendario de torneos y avisos del staff: {destino}.",
+        color=discord.Color.gold()
+    )
+    await ctx.send(embed=aplicar_marca(embed))
+
+
+# Recordatorio de scrim (Lun-Vie 6:45 pm CDMX). Solo corre si SCRIM_RECORDATORIO=1
+HORA_RECORDATORIO = datetime.time(hour=18, minute=45, tzinfo=ZONA_MX)
+
+
+@tasks.loop(time=HORA_RECORDATORIO)
+async def recordatorio_scrim():
+    ahora = datetime.datetime.now(ZONA_MX)
+    if ahora.weekday() > 4:
+        return
+    for guild in bot.guilds:
+        canal = discord.utils.get(guild.text_channels, name="scrims-y-entrenamientos")
+        if canal:
+            try:
+                await canal.send("⚔️ **Recordatorio:** hoy hay práctica a las **7:00 pm (hora CDMX)**. ¡Conéctense a voz!")
+            except Exception as e:
+                print(f"AVISO: No se pudo enviar el recordatorio de scrim: {e}")
 
 
 bot.run(TOKEN)
